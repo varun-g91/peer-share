@@ -1,426 +1,118 @@
-import React, { useEffect, useRef, useState } from "react";
-import {
-    Upload,
-    Download,
-    Copy,
-    CheckCircle,
-    X,
-    RefreshCw,
-} from "lucide-react";
-
-import { useDropzone } from 'react-dropzone'
+import { useEffect, useState, useCallback } from "react";
+import { Upload, Download, Copy, CheckCircle, RefreshCw } from "lucide-react";
+import { useWebSocket } from "./hooks/useWebSocket";
+import { usePeerConnection } from "./hooks/usePeerConnection";
+import { useFileTransfer } from "./hooks/useFileTransfer";
+import { useDropzone } from "react-dropzone";
 
 const App = () => {
-    const [peerId, setPeerId] = useState("");
-    const [targetPeerId, setTargetPeerId] = useState("");
-    const [status, setStatus] = useState("Disconnected");
-    const [fileSending, setFileSending] = useState(false);
-    const [wsConnected, setWsConnected] = useState(false);
-    const [transferProgress, setTransferProgress] = useState(0);
-    const [role, setRole] = useState(null); // 'sender' or 'receiver'
+    const [role, setRole] = useState(null);
     const [copied, setCopied] = useState(false);
-    const [selectedFile, setSelectedFile] = useState(null);
 
-    const fileInputRef = useRef(null);
-    const socketRef = useRef(null);
-    const peerConnectionRef = useRef(null);
-    const dataChannelRef = useRef(null);
-    const reconnectTimeoutRef = useRef(null);
+    const { peerId, wsConnected, status, setStatus, socketRef } =
+        useWebSocket();
+    const {
+        targetPeerId,
+        setTargetPeerId,
+        peerConnectionRef,
+        dataChannelRef,
+        createPeerConnection,
+        handleOffer,
+        handleAnswer,
+        handleCandidate,
+    } = usePeerConnection(socketRef, setStatus);
 
-    // Add function to copy Peer ID to clipboard
+    const {
+        fileSending,
+        transferProgress,
+        selectedFile,
+        setSelectedFile,
+        fileInputRef,
+        formatFileSize,
+        setUpDataChannel,
+        sendFile,
+    } = useFileTransfer(dataChannelRef, setStatus);
+
+    /** Copy Peer ID to Clipboard */
     const copyPeerId = () => {
         navigator.clipboard.writeText(peerId);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Function to format file size
-    const formatFileSize = (bytes) => {
-        if (bytes === 0) return "0 Bytes";
-        const k = 1024;
-        const sizes = ["Bytes", "KB", "MB", "GB"];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-    };
-
-    const connectWebSocket = () => {
-        try {
-            const socket = new WebSocket("ws://localhost:8080");
-            socketRef.current = socket;
-
-            socket.onopen = () => {
-                console.log("WebSocket connected");
-                setWsConnected(true);
-                setStatus("WebSocket Connected");
-
-                const newPeerId = Math.random().toString(36).substring(7);
-                setPeerId(newPeerId);
-                socket.send(
-                    JSON.stringify({ type: "register", peerId: newPeerId })
-                );
-            };
-
-            socket.onclose = () => {
-                console.log("WebSocket disconnected");
-                setWsConnected(false);
-                setStatus("WebSocket Disconnected");
-
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    if (
-                        !socketRef.current ||
-                        socketRef.current.readyState === WebSocket.CLOSED
-                    ) {
-                        console.log("Attempting to reconnect...");
-                        connectWebSocket();
-                    }
-                }, 2000);
-            };
-
-            socket.onerror = (error) => {
-                console.error("WebSocket error:", error);
-                setStatus("WebSocket Error");
-            };
-
-            socket.onmessage = async (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log("Received message:", data);
-
-                    // Create new peer connection if we don't have one or if it's closed
-                    if (
-                        !peerConnectionRef.current ||
-                        peerConnectionRef.current.connectionState === "closed"
-                    ) {
-                        createPeerConnection();
-                    }
-
-                    switch (data.type) {
-                        case "offer":
-                            await handleOffer(data);
-                            break;
-                        case "answer":
-                            await handleAnswer(data);
-                            break;
-                        case "candidate":
-                            await handleCandidate(data);
-                            break;
-                        default:
-                            console.log("Unknown message type:", data.type);
-                    }
-                } catch (error) {
-                    console.error("Error handling message:", error);
-                }
-            };
-        } catch (error) {
-            console.error("Error creating WebSocket:", error);
-            setStatus("WebSocket Creation Error");
+    /** Handle Peer Connection */
+    const connectPeer = async () => {
+        if (!targetPeerId) {
+            console.error("Target peer ID missing!");
+            return;
         }
-    };
 
-    const handleOffer = async (data) => {
-        await peerConnectionRef.current.setRemoteDescription(
-            new RTCSessionDescription(data.offer)
+        console.log("Creating peer connection...");
+        peerConnectionRef.current = await createPeerConnection();
+
+        if (!peerConnectionRef.current) {
+            console.error("Peer connection failed to initialize.");
+            setStatus("Connection Error");
+            return;
+        }
+
+        console.log("Creating data channel...");
+        dataChannelRef.current = peerConnectionRef.current.createDataChannel(
+            "fileTransfer",
+            { ordered: true }
         );
-        const answer = await peerConnectionRef.current.createAnswer();
-        await peerConnectionRef.current.setLocalDescription(answer);
-        socketRef.current.send(
-            JSON.stringify({
-                type: "answer",
-                target: data.peerId,
-                answer,
+
+        if (!dataChannelRef.current) {
+            console.error("Failed to create data channel.");
+            return;
+        }
+
+        console.log("Data channel created:", dataChannelRef.current);
+        setUpDataChannel();
+
+        console.log("Creating and sending offer...");
+        peerConnectionRef.current
+            .createOffer()
+            .then((offer) =>
+                peerConnectionRef.current.setLocalDescription(offer)
+            )
+            .then(() => {
+                socketRef.current?.send(
+                    JSON.stringify({
+                        type: "offer",
+                        target: targetPeerId,
+                        peerId,
+                        offer: peerConnectionRef.current.localDescription,
+                    })
+                );
             })
-        );
-        setStatus("Connected to Peer");
+            .catch((error) => {
+                console.error("Error creating offer:", error);
+                setStatus("Connection Error");
+            });
     };
 
-    const handleAnswer = async (data) => {
-        await peerConnectionRef.current.setRemoteDescription(
-            new RTCSessionDescription(data.answer)
-        );
-        setStatus("Connected to Peer");
-    };
 
-    const handleCandidate = async (data) => {
-        await peerConnectionRef.current.addIceCandidate(
-            new RTCIceCandidate(data.candidate)
-        );
-    };
 
-    useEffect(() => {
-        connectWebSocket();
+    /** Reset Connection */
+    const resetConnection = () => {
+        setRole(null);
+        setTargetPeerId("");
+        setSelectedFile(null);
+        setStatus("Disconnected");
 
-        return () => {
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-            }
-            if (socketRef.current) {
-                socketRef.current.close();
-            }
-            if (peerConnectionRef.current) {
-                peerConnectionRef.current.close();
-            }
-            if (dataChannelRef.current) {
-                dataChannelRef.current.close();
-            }
-        };
-    }, []);
+        if (dataChannelRef.current) {
+            dataChannelRef.current.close();
+            dataChannelRef.current = null;
+        }
 
-    function createPeerConnection() {
-        // Close existing connection if any
         if (peerConnectionRef.current) {
             peerConnectionRef.current.close();
             peerConnectionRef.current = null;
         }
+    };
 
-        // Create new connection
-        peerConnectionRef.current = new RTCPeerConnection({
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                {
-                    urls: "turn:openrelay.metered.ca:80",
-                    username: "openrelayproject",
-                    credential: "openrelayproject",
-                },
-            ],
-        });
-
-        peerConnectionRef.current.oniceconnectionstatechange = () => {
-            console.log(
-                "ICE Connection State:",
-                peerConnectionRef.current?.iceConnectionState
-            );
-            if (
-                peerConnectionRef.current?.iceConnectionState === "disconnected"
-            ) {
-                setStatus("Peer Disconnected");
-            }
-        };
-
-        peerConnectionRef.current.onconnectionstatechange = () => {
-            console.log(
-                "Connection State:",
-                peerConnectionRef.current?.connectionState
-            );
-            if (peerConnectionRef.current?.connectionState === "failed") {
-                setStatus("Connection Failed");
-            }
-        };
-
-        peerConnectionRef.current.onicecandidate = (event) => {
-            if (event.candidate && targetPeerId) {
-                socketRef.current?.send(
-                    JSON.stringify({
-                        type: "candidate",
-                        target: targetPeerId,
-                        candidate: event.candidate,
-                    })
-                );
-            }
-        };
-
-        peerConnectionRef.current.ondatachannel = (event) => {
-            console.log("Data channel received");
-            dataChannelRef.current = event.channel;
-            setUpDataChannel();
-        };
-    }
-
-
-    function setUpDataChannel() {
-        if (!dataChannelRef.current) return;
-
-        dataChannelRef.current.binaryType = "arraybuffer";
-
-        dataChannelRef.current.onopen = () => {
-            console.log("Data channel opened");
-            setStatus("Connected to Peer");
-        };
-
-        dataChannelRef.current.onclose = () => {
-            console.log("Data channel closed");
-            setStatus("Disconnected");
-        };
-
-        dataChannelRef.current.onerror = (error) => {
-            console.error("Data channel error:", error);
-            setStatus("Data Channel Error");
-        };
-
-        let receivedBuffers = [];
-        let receivedSize = 0;
-        let fileInfo = null;
-
-        dataChannelRef.current.onmessage = (event) => {
-            try {
-                const data = event.data;
-                if (typeof data === "string") {
-                    const parsedData = JSON.parse(data);
-                    if (parsedData.messageType === "file-info") {
-                        fileInfo = parsedData;
-                        receivedBuffers = [];
-                        receivedSize = 0;
-                        console.log("Receiving file:", fileInfo.name);
-                    }
-                } else {
-                    receivedBuffers.push(data);
-                    receivedSize += data.byteLength;
-
-                    if (fileInfo) {
-                        const progress = (receivedSize / fileInfo.size) * 100;
-                        setTransferProgress(Math.round(progress));
-                    }
-
-                    if (fileInfo && receivedSize === fileInfo.size) {
-                        console.log("File fully received");
-                        const receivedFile = new Blob(receivedBuffers);
-                        const link = document.createElement("a");
-                        link.href = URL.createObjectURL(receivedFile);
-                        link.download = fileInfo.name;
-                        link.click();
-                        URL.revokeObjectURL(link.href);
-
-                        // Reset state
-                        receivedBuffers = [];
-                        receivedSize = 0;
-                        fileInfo = null;
-                        setTransferProgress(0);
-                    }
-                }
-            } catch (error) {
-                console.error("Error processing received data:", error);
-            }
-        };
-    }
-
-    function connectPeer() {
-        try {
-            // Always create a new peer connection when connecting
-            createPeerConnection();
-
-            setStatus("Connecting...");
-
-            // Create new data channel
-            dataChannelRef.current =
-                peerConnectionRef.current.createDataChannel("fileTransfer", {
-                    ordered: true,
-                });
-            setUpDataChannel();
-
-            // Create and send offer
-            peerConnectionRef.current
-                .createOffer()
-                .then((offer) =>
-                    peerConnectionRef.current.setLocalDescription(offer)
-                )
-                .then(() => {
-                    socketRef.current?.send(
-                        JSON.stringify({
-                            type: "offer",
-                            target: targetPeerId,
-                            peerId,
-                            offer: peerConnectionRef.current.localDescription,
-                        })
-                    );
-                })
-                .catch((error) => {
-                    console.error("Error creating offer:", error);
-                    setStatus("Connection Error");
-                });
-        } catch (error) {
-            console.error("Error connecting to peer:", error);
-            setStatus("Connection Error");
-
-            // Cleanup on error
-            if (dataChannelRef.current) {
-                dataChannelRef.current.close();
-                dataChannelRef.current = null;
-            }
-            if (peerConnectionRef.current) {
-                peerConnectionRef.current.close();
-                peerConnectionRef.current = null;
-            }
-        }
-    }
-
-    async function sendFile() {
-        if (
-            !dataChannelRef.current ||
-            dataChannelRef.current.readyState !== "open"
-        ) {
-            alert("Connection not established");
-            return;
-        }
-
-        const file = fileInputRef.current.files[0];
-        if (!file) {
-            alert("Please select a file");
-            return;
-        }
-
-        try {
-            setFileSending(true);
-            setTransferProgress(0);
-
-            // Send file info
-            dataChannelRef.current.send(
-                JSON.stringify({
-                    messageType: "file-info",
-                    name: file.name,
-                    size: file.size,
-                })
-            );
-
-            // Use chunks of 16KB
-            const CHUNK_SIZE = 16384;
-            const reader = new FileReader();
-            let offset = 0;
-
-            reader.onload = (e) => {
-                if (
-                    !dataChannelRef.current ||
-                    dataChannelRef.current.readyState !== "open"
-                ) {
-                    setFileSending(false);
-                    setStatus("Connection Lost During Transfer");
-                    return;
-                }
-
-                dataChannelRef.current.send(e.target.result);
-                offset += e.target.result.byteLength;
-
-                const progress = (offset / file.size) * 100;
-                setTransferProgress(Math.round(progress));
-
-                if (offset < file.size) {
-                    // Read the next chunk
-                    readNextChunk();
-                } else {
-                    // Transfer complete
-                    setFileSending(false);
-                    setTransferProgress(0);
-                }
-            };
-
-            reader.onerror = (error) => {
-                console.error("Error reading file:", error);
-                setFileSending(false);
-                setStatus("File Reading Error");
-            };
-
-            function readNextChunk() {
-                const slice = file.slice(offset, offset + CHUNK_SIZE);
-                reader.readAsArrayBuffer(slice);
-            }
-
-            // Start reading the first chunk
-            readNextChunk();
-        } catch (error) {
-            console.error("Error sending file:", error);
-            setFileSending(false);
-            setStatus("File Sending Error");
-        }
-    }
-
+    /** Handle File Selection */
     const handleFileSelect = (event) => {
         const file = event.target.files[0];
         if (file) {
@@ -428,31 +120,51 @@ const App = () => {
         }
     };
 
-    function resetConnection() {
-        try {
-            setRole(null);
-            setTargetPeerId("");
-            setSelectedFile(null);
-            setTransferProgress(0);
-            setStatus("Disconnected");
+    /** Listen for WebSocket Messages */
+    useEffect(() => {
+        if (!socketRef.current) return;
 
-            // Close and cleanup data channel
-            if (dataChannelRef.current) {
-                dataChannelRef.current.close();
-                dataChannelRef.current = null;
-            }
+        const handleMessage = async (event) => {
+            const data = JSON.parse(event.data);
 
-            // Close and cleanup peer connection
-            if (peerConnectionRef.current) {
-                peerConnectionRef.current.close();
-                peerConnectionRef.current = null;
+            switch (data.type) {
+                case "offer":
+                    console.log("Received offer:", data);
+                    await handleOffer(data);
+                    break;
+                case "answer":
+                    console.log("Received answer:", data);
+                    await handleAnswer(data);
+                    break;
+                case "candidate":
+                    console.log("Received ICE candidate:", data);
+                    await handleCandidate(data);
+                    break;
+                default:
+                    console.warn("Unknown message type:", data.type);
             }
-        } catch (error) {
-            console.error("Error during reset:", error);
+        };
+
+        socketRef.current.addEventListener("message", handleMessage);
+        return () => {
+            socketRef.current?.removeEventListener("message", handleMessage);
+        };
+    }, [socketRef, handleOffer, handleAnswer, handleCandidate]);
+
+    const onDrop = useCallback((acceptedFiles) => {
+        if (acceptedFiles.length > 0) {
+            setSelectedFile(acceptedFiles[0]);
         }
-    }
+    }, []);
 
-    
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        onDrop,
+        multiple: false,
+    });
+
+    const handleFileChange = (event) => {
+        setSelectedFile(event.target.files[0]);
+    }
 
     return (
         <div className="flex flex-col items-center p-6 min-h-screen bg-gray-50">
@@ -512,31 +224,6 @@ const App = () => {
                 {/* Connection Interface */}
                 {role && (
                     <div className="space-y-4">
-                        {/* Peer ID Display */}
-                        <div className="flex flex-col space-y-2">
-                            <label className="text-sm font-medium text-gray-700">
-                                {role === "sender"
-                                    ? "Your Sender ID"
-                                    : "Your Receiver ID"}
-                            </label>
-                            <div className="flex items-center space-x-2">
-                                <code className="flex-1 p-2 bg-gray-100 rounded text-sm">
-                                    {peerId}
-                                </code>
-                                <button
-                                    onClick={copyPeerId}
-                                    className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
-                                    title="Copy ID"
-                                >
-                                    {copied ? (
-                                        <CheckCircle size={20} />
-                                    ) : (
-                                        <Copy size={20} />
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-
                         {/* Target ID Input */}
                         <div className="flex flex-col space-y-2">
                             <label className="text-sm font-medium text-gray-700">
@@ -557,60 +244,38 @@ const App = () => {
                             />
                         </div>
 
-                        {/* File Selection (Sender only) */}
-                        {role === "sender" && (
-                            <div className="flex flex-col space-y-2">
-                                <label className="text-sm font-medium text-gray-700">
-                                    Select File
-                                </label>
-                                <input
-                                    type="file"
-                                    onChange={handleFileSelect}
-                                    ref={fileInputRef}
-                                    className="block w-full text-sm text-gray-500
-                                        file:mr-4 file:py-2 file:px-4
-                                        file:rounded-md file:border-0
-                                        file:text-sm file:font-semibold
-                                        file:bg-blue-50 file:text-blue-700
-                                        hover:file:bg-blue-100"
-                                />
-                                {selectedFile && (
-                                    <div className="text-sm text-gray-600">
-                                        Selected: {selectedFile.name} (
-                                        {formatFileSize(selectedFile.size)})
-                                    </div>
-                                )}
+                        {/* Status Display */}
+                        <div className="text-sm font-medium text-gray-700">
+                            Status: {status}
+                        </div>
+
+                        {peerId && (
+                            <div className="flex flex-col items-center bg-gray-100 p-3 rounded-lg mb-4">
+                                <span className="text-sm font-medium text-gray-700">
+                                    Your Peer ID
+                                </span>
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-gray-800 font-mono text-lg">
+                                        {peerId}
+                                    </span>
+                                    <button
+                                        onClick={copyPeerId}
+                                        className="text-gray-600 hover:text-gray-800"
+                                    >
+                                        {copied ? (
+                                            <CheckCircle
+                                                size={20}
+                                                className="text-green-500"
+                                            />
+                                        ) : (
+                                            <Copy size={20} />
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         )}
 
-                        {/* Status and Progress */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-gray-700">
-                                    Status
-                                </span>
-                                <span className="text-sm text-gray-600">
-                                    {status}
-                                </span>
-                            </div>
-                            {transferProgress > 0 && (
-                                <div className="space-y-1">
-                                    <div className="bg-gray-200 rounded-full h-2">
-                                        <div
-                                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                            style={{
-                                                width: `${transferProgress}%`,
-                                            }}
-                                        ></div>
-                                    </div>
-                                    <div className="text-right text-sm text-gray-600">
-                                        {transferProgress}%
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Action Buttons */}
+                        {/* Connect and Reset Buttons */}
                         <div className="flex space-x-3 pt-4">
                             <button
                                 onClick={connectPeer}
@@ -619,38 +284,48 @@ const App = () => {
                                     !targetPeerId ||
                                     status === "Connected to Peer"
                                 }
-                                className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 
-                                    disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                             >
                                 Connect
                             </button>
-                            {role === "sender" && (
-                                <button
-                                    onClick={sendFile}
-                                    disabled={
-                                        fileSending ||
-                                        !wsConnected ||
-                                        status !== "Connected to Peer" ||
-                                        !selectedFile
-                                    }
-                                    className="flex-1 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 
-                                        disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    {fileSending ? `Sending...` : "Send"}
-                                </button>
-                            )}
+                            <button
+                                onClick={resetConnection}
+                                className="w-full mt-4 flex items-center justify-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
+                            >
+                                <RefreshCw size={16} />
+                                <span>Reset Connection</span>
+                            </button>
                         </div>
-
-                        {/* Reset Button */}
-                        <button
-                            onClick={resetConnection}
-                            className="w-full mt-4 flex items-center justify-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
-                        >
-                            <RefreshCw size={16} />
-                            <span>Reset Connection</span>
-                        </button>
                     </div>
                 )}
+
+                {/* Drop zone */}
+                <div
+                    {...getRootProps()}
+                    className="border-2 w-full border-dashed p-6 text-center cursor-pointer h-36"
+                >
+                    <input ref={fileInputRef} onChange={handleFileChange} {...getInputProps()} />
+                    {isDragActive ? (
+                        <p>Drop the file here ...</p>
+                    ) : (
+                        <p>Drag & drop a file here, or click to select</p>
+                    )}
+                </div>
+
+                {/* Display Selected File */}
+                {selectedFile && (
+                    <p className="text-sm text-gray-700">
+                        Selected File: {selectedFile.name} ({selectedFile.size}{" "}
+                        bytes)
+                    </p>
+                )}
+
+                <button
+                    onClick={sendFile}
+                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 mt-2"
+                >
+                    Send File
+                </button>
             </div>
         </div>
     );
