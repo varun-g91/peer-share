@@ -10,51 +10,23 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT
 
-// Enable CORS and JSON parsing
 app.use(cors());
 app.use(express.json());
 
-// Verify Twilio credentials are loaded
-if (!process.env.TWILIO_SID || !process.env.TWILIO_AUTH_TOKEN) {
-    console.error('Missing Twilio credentials in environment variables');
-    process.exit(1);
-}
-
-const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const peers = {};
 
-// Fixed API endpoint
-app.get('/api/turn-credentials', async (req, res) => {
-    console.log('Requesting Twilio TURN credentials...');
 
-    try {
-        const token = await client.tokens.create();
-        console.log('Twilio token created:', token.iceServers ? 'Success' : 'No ICE servers');
-
-        if (!token.iceServers) {
-            throw new Error('No ICE servers received from Twilio');
-        }
-
-        res.json({ iceServers: token.iceServers });
-
-    } catch (err) {
-        console.error('Error getting Twilio credentials:', err);
-        res.status(500).json({
-            error: 'Failed to get TURN credentials',
-            details: err.message
-        });
-    }
-});
-
-// Add a test endpoint to verify the server is running
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
+
 wss.on("connection", (ws) => {
     console.log("New websocket connection established");
+
+
 
     ws.on("message", (message) => {
         try {
@@ -101,15 +73,12 @@ wss.on("connection", (ws) => {
 
 server.listen(PORT, "0.0.0.0", () => {
     console.log(`Signaling server running on port: ${PORT}`);
-    console.log(`TURN credentials endpoint: http://localhost:${PORT}/api/turn-credentials`);
 });
 
-// Handle server errors
 server.on('error', (err) => {
     console.error('Server error:', err);
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
 });
