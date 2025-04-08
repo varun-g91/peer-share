@@ -1,4 +1,11 @@
-export const FileIcon = ({ size, className }) => (
+import React from "react";
+
+interface FileIconProps {
+  size: number;
+  className?: string; // Optional className
+}
+
+export const FileIcon: React.FC<FileIconProps> = ({ size, className }) => (
     <svg
         xmlns="http://www.w3.org/2000/svg"
         width={size}

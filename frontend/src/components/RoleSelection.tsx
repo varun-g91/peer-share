@@ -1,10 +1,15 @@
+import React from "react";
 import { Download, Upload } from "lucide-react";
 
-export function RoleSelection({ setRole }) {
+interface RoleSelectionProps {
+    setRole: (role: "sender" | "receiver" | null) => void;
+}
+
+export function RoleSelection({ setRole }: RoleSelectionProps) {
     return (
         <div className="flex flex-col space-y-4 mb-6">
             <h2 className="text-lg font-semibold text-center">
-                Transfer History    
+                Transfer History
             </h2>
             <div className="grid grid-cols-2 gap-4">
                 <button

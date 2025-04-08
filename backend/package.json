@@ -2,21 +2,35 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "server.js",
+  "main": "dist/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon backend/server.js"
+    "build": "tsc",
+    "start": "node src/server.js",
+    "dev": "ts-node-dev --respawn src/server.ts",
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/ws": "^8.18.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "nodemon": "^3.1.9",
     "twilio": "^5.4.5",
+    "uuid": "^11.1.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.14.0",
+    "@typescript-eslint/parser": "^8.29.0",
+    "nodemon": "^3.1.9",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.2"
   }
 }
