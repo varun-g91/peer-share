@@ -19,10 +19,10 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
 
     const handleReconnect = async () => {
         try {
+            console.log("Reconnecting");
             await connectWebSocket();
             setMessage(""); // Clear error message on successful connection
         } catch (error) {
-            // Set appropriate error message based on status
             if (wsStatus === 'Disconnected') {
                 setMessage("Signaling server connection not established");
             } else if (wsStatus === 'Error') {
@@ -71,7 +71,7 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
                     </span>
                     <button
                         onClick={handleReconnect}
-                        className="flex items-center gap-1 text-sm text-red-600 hover:text-red-800 transition"
+                        className="flex items-center cursor-pointer gap-1 text-sm text-red-600 hover:text-red-800 transition"
                     >
                         <RotateCcw className="w-4 h-4" />
                         Retry

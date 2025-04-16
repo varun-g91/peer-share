@@ -4,10 +4,8 @@
   "description": "",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node src/server.js",
-    "dev": "ts-node-dev --respawn src/server.ts",
-    "test": "jest"
+    "start": "node dist/server.js",
+    "dev": "nodemon src/server.js"
   },
   "keywords": [],
   "author": "",

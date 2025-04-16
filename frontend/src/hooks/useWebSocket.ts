@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { RootState } from "../store";
+import { setWebSocketConnected, setPeerId, setWebSocketStatus, } from "../store/peerSlice";
 
 export type WebSocketStatus = 'Connected' | 'Disconnected' | 'Error';
 
 export const useWebSocket = () => {
-    const [peerId, setPeerId] = useState<string>("");
-    const [wsConnected, setWsConnected] = useState<boolean>(false);
-    const [wsStatus, setWsStatus] = useState<WebSocketStatus>("Disconnected");
     const socketRef = useRef<WebSocket | null>(null);
     
+    const dispatch = useDispatch();
+
+    const {
+        wsConnected,
+        wsStatus,
+    } = useSelector((state: RootState) => state.peer);
 
     const WS_PORT = import.meta.env.VITE_WS_PORT || '8080';
 
@@ -24,10 +30,11 @@ export const useWebSocket = () => {
                 socketRef.current = socket;
     
                 socket.onopen = () => {
-                    setWsConnected(true);
-                    setWsStatus("Connected");
+                    dispatch(setWebSocketConnected(true));
+                    dispatch(setWebSocketStatus("Connected"));
                     const newPeerId = Math.random().toString(36).substring(7);
-                    setPeerId(newPeerId);
+                    dispatch(setPeerId(newPeerId));
+                    console.log("Sending register signal to signaling server")
                     socket.send(
                         JSON.stringify({ type: "register", peerId: newPeerId })
                     );
@@ -35,13 +42,16 @@ export const useWebSocket = () => {
                 };
     
                 socket.onclose = () => {
-                    setWsConnected(false);
-                    setWsStatus("Disconnected");
+                    dispatch(setWebSocketConnected(false));
+                    dispatch(setWebSocketStatus("Disconnected"));
                 };
                 
                 socket.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
+                        if (!data) {
+                            throw new Error("Error parsing data")
+                        }
                         console.log("WebSocket message received:", data);
                     } catch (error) {
                         console.error("Error parsing WebSocket message:", error);
@@ -50,34 +60,23 @@ export const useWebSocket = () => {
                 
                 socket.onerror = (error) => {
                     console.error("WebSocket error:", error);
-                    setWsStatus("Error");
+                    dispatch(setWebSocketStatus("Error"));
                     reject(new Error("WebSocket connection failed"));
                 };
     
             } catch (error) {
                 console.error("Error creating WebSocket:", error);
-                setWsStatus("Error");
+                dispatch(setWebSocketStatus("Error"));
                 reject(new Error("Failed to create WebSocket connection"));
             }
         });
     };
 
-    useEffect(() => {
-        connectWebSocket().catch(error => {
-            console.error("Failed to connect to signaling server");
-        });
-        return () => {
-            if (socketRef.current) {
-                socketRef.current.close();
-            }
-        };
-    }, []);
+    
 
     return {
-        peerId,
-        wsConnected,
         wsStatus,
-        setWsStatus,
+        wsConnected,
         socketRef,
         connectWebSocket,
     };

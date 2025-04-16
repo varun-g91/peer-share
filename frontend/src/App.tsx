@@ -2,46 +2,54 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { usePeerConnection } from "./hooks/usePeerConnection";
 import { useFileTransfer } from "./hooks/useFileTransfer";
-import { usePeerState } from "./hooks/usePeerState";
-import { useDropzone } from "react-dropzone";
 import Header from "./components/Header";
 import { ConnectionInterface } from "./components/ConnectionInterface";
 import { FileUpload } from "./components/FileUpload";
 import { FileReceiver } from "./components/FileReceiver";
 import { TransferHistory } from "./components/TransferHistory";
 import { RoleSelection } from "./components/RoleSelection";
-import { formatFileSize } from "./utils/formatFileSize";
-import { X } from "lucide-react";
-import {
-    IncomingFile,
-    Peer,
-    FileMetadata,
-    SignalState,
-    Role,
-    Transfer,
-} from "./types/index";
 import { v4 as uuidv4 } from "uuid";
 import ErrorModal from "./components/ErrorModal";
+import { useDispatch, useSelector } from "react-redux";
+import { RootState } from "./store";
+import {
+    setLocalPeer,
+    setWebSocketStatus,
+    setRole,
+    setIncomingFile,
+    setReceiveProgress,
+    setIsReceivingFile,
+} from "./store/peerSlice";
+import { completeTransferSender, resetCurrentTransfer, updateProgress } from "./store/transferSlice";
+import { ProgressBar } from "./components/ProgressBar";
+import { FileMetadata } from "./types";
 
 const App = () => {
-    const [role, setRole] = useState<Role>(null);
+    const { incomingFile, receiveProgress, isReceivingFile, wsConnected, isConnected } = useSelector(
+        (state: RootState) => state.peer
+    );
+
     const [copied, setCopied] = useState<boolean>(false);
-    const [incomingFile, setIncomingFile] = useState<IncomingFile | null>(null);
-    const [receiveProgress, setReceiveProgress] = useState<number>(0);
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
-    const { peerId, wsConnected, wsStatus, setWsStatus, socketRef, connectWebSocket } =
-        useWebSocket();
+    const { socketRef, connectWebSocket, wsStatus } = useWebSocket();
 
-    const rejectFile = () => {
-        setIncomingFile(null);
-        setReceiveProgress(0);
+    const dispatch = useDispatch();
+
+    const resetFileReceiver = () => {
+        dispatch(setIncomingFile(null));
+        dispatch(resetCurrentTransfer());
+        dispatch(setIsReceivingFile(false));
+        dispatch(setReceiveProgress(null));
     };
 
-    const acceptFile = () => {
-        setIncomingFile(null);
-        setReceiveProgress(0);
-    };
+    const currentTransfer = useSelector(
+        (state: RootState) => state.transfer.currentTransfer
+    );
+
+    const transferHistory = useSelector(
+        (state: RootState) => state.transfer.transferHistory
+    );
 
     const copyPeerId = () => {
         navigator.clipboard.writeText(peerId);
@@ -51,55 +59,48 @@ const App = () => {
 
     const removeSelectedFile = () => {
         setSelectedFile(null);
-        setTransferProgress(0);
+        dispatch(updateProgress(null));
+        dispatch(resetCurrentTransfer());
         setFileSending(false);
     };
 
     const {
-        targetPeerId,
         setTargetPeerId,
         peerConnectionRef,
         dataChannelRef,
+        targetPeerId,
+        disconnectPeer,
         createPeerConnection,
-        setupDataChannel,
         handleOffer,
         handleAnswer,
         handleCandidate,
-        disconnectPeer,
+        peerId,
         fileInfoRef,
-        isConnected,
-        acceptTransferredFile,
-        pcStatus,
-        setPcStatus,
-    } = usePeerConnection(
-        socketRef,
         role,
-        setRole,
-        setReceiveProgress,
-        setIncomingFile,
-    );
+        pcStatus,
+        receivedSizeRef,
+        remotePeer,
+        completedFileRef,
+    } = usePeerConnection(socketRef);
 
     const {
         fileSending,
-        transferProgress,
-        setTransferProgress,
         selectedFile,
         setSelectedFile,
-        fileInputRef,
         sendFile,
         setFileSending,
     } = useFileTransfer();
 
-    const {
-        peerState,
-        initializeLocalPeer,
-        initializeRemotePeer,
-        updatePeerConnection,
-        startFileTransfer,
-        updateTransferProgress,
-        updateTransferStatus,
-        resetPeerState
-    } = usePeerState();
+    useEffect(() => {
+        connectWebSocket().catch((error) => {
+            console.error("Failed to connect to signaling server: ", error);
+        });
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.close();
+            }
+        };
+    }, []);
 
     const closeModal = () => {
         setIsModalOpen(false);
@@ -107,31 +108,39 @@ const App = () => {
 
     useEffect(() => {
         if (role && peerId) {
-            initializeLocalPeer(peerId, role);
+            console.log("Setting local peer in App.jsx:", {
+                id: peerId,
+                role: role,
+                isConnected: false,
+            });
+            dispatch(
+                setLocalPeer({
+                    id: peerId,
+                    role: role,
+                    isConnected: false,
+                })
+            );
         }
-    }, [role, peerId]);
+    }, [role, peerId, dispatch]);
+
+    useEffect(() => {
+        if (incomingFile) {
+            console.log("Incoming file:", incomingFile);
+        }
+    }, [incomingFile]);
 
     const handleFileSend = () => {
-        console.log("handleFileSend called", {
-            hasFile: !!selectedFile,
-            hasDataChannel: !!dataChannelRef.current,
-            dataChannelState: dataChannelRef.current?.readyState,
-            hasRemotePeer: !!peerState.remotePeer,
-            selectedFileInfo: selectedFile ? {
-                name: selectedFile.name,
-                size: selectedFile.size
-            } : null
-        });
-    
-        if (!selectedFile || !dataChannelRef.current || !peerState.remotePeer) {
+        console.log("handleFileSend called");
+
+        if (!selectedFile || !dataChannelRef.current || !remotePeer) {
             console.error("Missing requirements for file send:", {
                 hasFile: !!selectedFile,
                 hasDataChannel: !!dataChannelRef.current,
-                hasRemotePeer: !!peerState.remotePeer
+                hasRemotePeer: !!remotePeer,
             });
             return;
         }
-    
+
         setFileSending(true);
         const fileMetadata = {
             id: uuidv4(),
@@ -139,30 +148,46 @@ const App = () => {
             size: selectedFile.size,
             type: selectedFile.type,
         };
-    
+
         console.log("Starting file transfer with metadata:", fileMetadata);
-        startFileTransfer(peerState.localPeer!.id, fileMetadata);
-        
-        dataChannelRef.current.send(JSON.stringify({
-            messageType: "file-info",
-            ...fileMetadata
-        }));
-    
+
+        dataChannelRef.current.send(
+            JSON.stringify({
+                messageType: "file-info",
+                ...fileMetadata,
+            })
+        );
+
         console.log("Sending file chunks...");
-        sendFile(dataChannelRef.current, selectedFile, (progress) => {
-            console.log("Transfer progress:", progress);
-            setTransferProgress(progress);
-            updateTransferProgress(peerState.localPeer!.id, progress);
-        })
+        sendFile(dataChannelRef.current, selectedFile, fileMetadata)
             .then(() => {
                 console.log("File transfer completed");
-                updateTransferStatus(peerState.localPeer!.id, 'completed');
+                if (dataChannelRef.current) {
+                    dataChannelRef.current.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        if (data.messageType === "file-accepted") {
+                            console.log("File accepted by receiver");
+                            
+                            if (data.fileMetadata) {
+                                dispatch(completeTransferSender(data.fileMetadata as FileMetadata));
+                            }
+
+                            console.log("current transfer:", currentTransfer);
+                            dispatch(resetCurrentTransfer());
+                            dispatch(setIncomingFile(null));
+                        } else if (data.messageType === "file-rejected") {
+                            console.log("File rejected by receiver");
+                            dispatch(resetCurrentTransfer());
+                            dispatch(setIncomingFile(null));
+                            alert("File transfer rejected by the receiver.");
+                        }
+                    }
+                }
                 setFileSending(false);
                 removeSelectedFile();
             })
             .catch((error) => {
                 console.error("File transfer failed:", error);
-                updateTransferStatus(peerState.localPeer!.id, 'rejected');
                 setFileSending(false);
                 removeSelectedFile();
             });
@@ -182,25 +207,18 @@ const App = () => {
                         await handleAnswer(data);
                         break;
                     case "candidate":
-                        console.log("Received ICE candidate:", data);
-                        await handleCandidate(data);
+                        console.log("Received ICE candidates:", data.candidate);
+                        await handleCandidate({ candidate: data.candidate });
                         break;
                     default:
                         console.warn("Unknown message type:", data.type);
                 }
             } catch (error) {
                 console.error("Error handling message:", error);
-                setWsStatus("Error");
+                dispatch(setWebSocketStatus("Error"));
             }
         },
-        [
-            handleOffer,
-            handleAnswer,
-            handleCandidate,
-            setIncomingFile,
-            setReceiveProgress,
-            setWsStatus,
-        ]
+        [handleOffer, handleAnswer, handleCandidate, setWebSocketStatus]
     );
 
     useEffect(() => {
@@ -238,28 +256,35 @@ const App = () => {
         };
     }, [socketRef, handleMessage]);
 
-    const onDrop = useCallback(
-        (acceptedFiles: File[]) => {
-            if (acceptedFiles.length > 0) {
-                setSelectedFile(acceptedFiles[0]);
+
+    useEffect(() => {
+        const handleDisconnect = () => {
+            if (
+                targetPeerId &&
+                peerConnectionRef.current?.connectionState === "disconnected"
+            ) {
+                alert("Disconnected due to single peer.");
+                dispatch(setRole(null));
+                disconnectPeer();
             }
-        },
-        [setSelectedFile]
-    );
+        };
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        onDrop,
-        multiple: false,
-    });
-
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        let file: File | null = null;
-        if (event.target.files) {
-            file = event.target.files[0];
+        if (peerConnectionRef.current) {
+            const connectionState = peerConnectionRef.current.connectionState;
+            if (
+                connectionState === "disconnected" ||
+                connectionState === "failed"
+            ) {
+                handleDisconnect();
+            }
         }
-        console.log("File selected:", file);
-        setSelectedFile(file);
-    };
+
+        return () => {
+            if (peerConnectionRef.current?.connectionState === "disconnected") {
+                handleDisconnect();
+            }
+        };
+    }, [disconnectPeer, targetPeerId, setRole]);
 
     return (
         <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -274,69 +299,53 @@ const App = () => {
                 <Header />
 
                 <div className="p-4 space-y-4">
-                    {!role && <RoleSelection setRole={setRole} />}
+                    {!role && <RoleSelection />}
 
                     {role && (
                         <ConnectionInterface
-                            copied={copied}
-                            setCopied={setCopied}
-                            role={role}
-                            targetPeerId={targetPeerId}
-                            setTargetPeerId={setTargetPeerId}
-                            pcStatus={pcStatus}
-                            wsConnected={wsConnected}
-                            isConnected={isConnected}
-                            peerId={peerId}
-                            copyPeerId={copyPeerId}
                             createPeerConnection={createPeerConnection}
-                            setupDataChannel={setupDataChannel}
-                            setPcStatus={setPcStatus}
-                            disconnectPeer={disconnectPeer}
-                            setRole={setRole}
-                            setIncomingFile={setIncomingFile}
-                            setReceiveProgress={setReceiveProgress}
-                            peerConnectionRef={peerConnectionRef}
-                            dataChannelRef={dataChannelRef}
-                            onSendOffer={(offerMessage) => {
-                                socketRef.current?.send(
-                                    JSON.stringify(offerMessage)
-                                );
-                            }}
-                            setWsStatus={setWsStatus}
-                            setSelectedFile={setSelectedFile}
+                            copyPeerId={copyPeerId}
+                            copied={copied}
+                            peerId={peerId}
+                            pcStatus={pcStatus}
+                            isConnected={isConnected}
+                            targetPeerId={targetPeerId}
+                            wsConnected={wsConnected}
+                            wsStatus={wsStatus}
+                            role={role}
                         />
                     )}
 
-                    {role === "sender" && pcStatus === "Connected to Peer" && (
+                    {role === "sender" && pcStatus === "Connected" && (
                         <FileUpload
-                            getRootProps={getRootProps}
-                            handleFileChange={handleFileChange}
-                            getInputProps={getInputProps}
-                            isDragActive={isDragActive}
                             setSelectedFile={setSelectedFile}
                             selectedFile={selectedFile}
                             sendFile={handleFileSend}
-                            transferProgress={transferProgress}
                             fileSending={fileSending}
                             removeSelectedFile={removeSelectedFile}
+                            currentTransfer={currentTransfer}
                         />
                     )}
 
-                    {role === "receiver" &&
-                        pcStatus === "Connected to Peer" &&
-                        incomingFile && (
-                            <FileReceiver
-                                incomingFile={incomingFile}
-                                transferStatus={peerState.remotePeer?.currentTransfer?.status || "pending"}
-                                transferProgress={receiveProgress}
-                                acceptFile={acceptFile}
-                                rejectFile={rejectFile}
-                                acceptTransferredFile={acceptTransferredFile}
-                            />
-                        )}
+                    {role === "receiver" && pcStatus === "Connected" && (
+                        <FileReceiver
+                            isReceivingFile={isReceivingFile}
+                            fileSending={fileSending}
+                            completedFileRef={completedFileRef}
+                            fileInfoRef={fileInfoRef}
+                            incomingFile={incomingFile}
+                            receivedSizeRef={receivedSizeRef}
+                            resetFileReceiver={resetFileReceiver}
+                            currentTransfer={currentTransfer}
+                            receiveProgress={receiveProgress}
+                            dataChannelRef={dataChannelRef}
+                        />
+                    )}
 
-                    {pcStatus === "Connected to Peer" &&
-                        (<TransferHistory transfers={peerState.localPeer?.transfers || []} />)}
+                    {pcStatus === "Connected" && (
+                        <TransferHistory transferHistory={transferHistory} />
+                    )}
+                    
                 </div>
             </div>
         </main>

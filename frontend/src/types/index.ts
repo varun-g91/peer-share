@@ -1,16 +1,11 @@
-export type TransferStatus = 'pending' | 'completed' | 'rejected' | 'in_progress';
+export type TransferStatus = 'pending' | 'completed' | 'rejected' | 'failed';
 export type Role = 'sender' | 'receiver' | null;
+export type PeerConnectionStatus = 'Connected' | 'Connecting' | 'Disconnected' | 'Error';
 
 export interface Peer {
     id: string;
     role: Role;
     isConnected: boolean;
-    transfers: Transfer[];
-    currentTransfer?: {
-        progress: number;
-        fileMetadata?: FileMetadata;
-        status: TransferStatus;
-    };
 }
 
 export interface PeerState {
@@ -25,42 +20,12 @@ export interface FileMetadata {
     size: number;
 }
 
-
-export interface SignalState {
-    peerId: string;
-    sdp?: RTCSessionDescriptionInit;
-    iceCandidates: RTCIceCandidate[];
-    iceGatheringComplete: boolean;
-}
-
-export interface OfferData {
-    peerId: string;
-    offer: RTCSessionDescriptionInit;
-}
-
-export interface AnswerData {
-    answer: RTCSessionDescriptionInit;
-}
-
-export interface CandiateData {
-    
-}
-
 export interface IncomingFile {
-    file: File | null;
-    metadata: FileMetadata;
+    metadata: FileMetadata | null;
 }
-
 
 export interface Transfer {
     fileMetadata?: FileMetadata;
     timestamp: string;
     status: TransferStatus;
-    direction: 'sent' | 'received';
 }
-
-
-
-
-
-
