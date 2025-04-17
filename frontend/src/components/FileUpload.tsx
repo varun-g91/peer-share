@@ -83,7 +83,7 @@ export const FileUpload = ({
                     ${
                         isDragActive
                             ? "border-blue-500 bg-blue-50"
-                            : "border-gray-300"
+                            : "border-white"
                     }
                     ${disabled ? "opacity-50 cursor-not-allowed" : ""}
                 `}
@@ -97,7 +97,7 @@ export const FileUpload = ({
             </div>
 
             {selectedFile && (
-                <div className="p-4 border rounded-lg space-y-4">
+                <div className="p-4 border rounded-lg border-[#161179] space-y-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
                             <FileIcon
@@ -131,7 +131,7 @@ export const FileUpload = ({
                         <button
                             onClick={sendFile}
                             disabled={false}
-                            className="w-full py-2 px-4 bg-blue-500 text-white rounded-lg
+                            className="w-full py-2 px-4 bg-[#161179] text-white rounded-lg
                                 hover:bg-blue-600 transition-colors disabled:bg-gray-400
                                 disabled:cursor-not-allowed"
                         >

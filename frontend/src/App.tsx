@@ -287,7 +287,7 @@ const App = () => {
     }, [disconnectPeer, targetPeerId, setRole]);
 
     return (
-        <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <main className="min-h-screen bg-[#F8EEDF] flex items-center justify-center p-4">
             <ErrorModal
                 isOpen={isModalOpen}
                 onClose={closeModal}
@@ -295,7 +295,7 @@ const App = () => {
                 wsStatus={wsStatus}
             />
 
-            <div className="w-full max-w-md bg-white rounded-lg shadow-lg overflow-hidden">
+            <div className="w-full max-w-md bg-[#E8C999] rounded-lg shadow-lg overflow-hidden">
                 <Header />
 
                 <div className="p-4 space-y-4">

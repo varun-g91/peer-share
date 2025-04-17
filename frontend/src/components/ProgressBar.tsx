@@ -12,6 +12,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     if (typeof progress !== "number") return null;
 
   const clampedProgress = Math.min(Math.max(progress, 0), 100);
+  console.log("Progress: ", clampedProgress)
 
   return (
     <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">

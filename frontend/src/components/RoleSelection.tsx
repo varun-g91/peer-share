@@ -16,16 +16,16 @@ export function RoleSelection() {
                         console.log("Role selection triggered!");
                         dispatch(setRole("sender"))
                     }}
-                    className="flex flex-col items-center p-4 border-2 border-blue-500 rounded-lg hover:bg-blue-50 transition-colors"
+                    className="flex flex-col items-center p-4 border-2 border-[#8E1616] rounded-lg hover:bg-blue-50 transition-colors"
                 >
-                    <Upload size={24} className="text-blue-500 mb-2" />
+                    <Upload size={24} className="text-[#8E1616] mb-2" />
                     <span className="font-medium">Send Files</span>
                 </button>
                 <button
                     onClick={() => dispatch(setRole("receiver"))}
-                    className="flex flex-col items-center p-4 border-2 border-green-500 rounded-lg hover:bg-green-50 transition-colors"
+                    className="flex flex-col items-center p-4 border-2 border-[#8E1616] rounded-lg hover:bg-green-50 transition-colors"
                 >
-                    <Download size={24} className="text-green-500 mb-2" />
+                    <Download size={24} className="text-[#8E1616] mb-2" />
                     <span className="font-medium">Receive Files</span>
                 </button>
             </div>

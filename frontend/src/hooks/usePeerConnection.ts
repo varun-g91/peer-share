@@ -36,6 +36,8 @@ type CandidateSignal = {
     candidate: RTCIceCandidate;
 };
 
+const CONNECTION_TIMEOUT = 1 * 60 * 1000; // 10 minutes
+
 export const usePeerConnection = (
     socketRef: React.RefObject<WebSocket | null>
 ) => {
@@ -43,12 +45,15 @@ export const usePeerConnection = (
     const { role, targetPeerId, pcStatus, peerId, remotePeer } =
         useSelector((state: RootState) => state.peer);
     const isInitiator = useSelector((state: RootState) => state.peer.isInitiator || false);
+
     const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
     const dataChannelRef = useRef<RTCDataChannel | null>(null);
     const receivedBuffersRef = useRef<ArrayBuffer[]>([]);
     const receivedSizeRef = useRef<number>(0);
     const fileInfoRef = useRef<FileMetadata | null>(null);
     const completedFileRef = useRef<File | null>(null);
+    const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 
     const iceServers = useMemo(
         () => ({
@@ -89,7 +94,24 @@ export const usePeerConnection = (
             dataChannelRef.current.close();
         }
         dispatch(resetPeerConnection());
+        clearTimeout(connectionTimeoutRef.current!);
     }, [resetPeerConnection]);
+
+    const setConnectionTimeout = useCallback(() => {
+        console.log("Setting connection timeout...");
+        clearTimeout(connectionTimeoutRef.current!);
+        connectionTimeoutRef.current = setTimeout(() => {
+            console.log("Connection timed out. Disconnecting...");
+            disconnectPeer();
+        }, CONNECTION_TIMEOUT);
+    }, [disconnectPeer]);
+
+    const resetConnectionTimeout = useCallback(() => {
+        console.log("Resetting connection timeout...");
+        clearTimeout(connectionTimeoutRef.current!);
+        setConnectionTimeout();
+    }, [setConnectionTimeout]);
+
 
     const handleDataChannelMessage = useCallback(
         (event: MessageEvent) => {
@@ -170,6 +192,7 @@ export const usePeerConnection = (
                     console.log("Data channel: ", channel);
                     dispatch(setPeerConnectionStatus("Connected"));
                     dispatch(setIsConnected(true));
+                    setConnectionTimeout();
                 };
 
                 channel.onclose = () => {

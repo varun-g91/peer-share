@@ -103,7 +103,7 @@ export const FileReceiver = ({
                         {incomingFile?.metadata?.name ? incomingFile?.metadata?.name : null}
                     </p>
                     <p className="text-sm text-gray-500">
-                        {receivedSizeRef.current && formatFileSize(receivedSizeRef.current)} bytes
+                        {currentTransfer?.fileMetadata?.size && formatFileSize(currentTransfer.fileMetadata.size)} bytes
                     </p>
                 </div>
             </div>
@@ -114,11 +114,11 @@ export const FileReceiver = ({
                     /> 
                 )}
             {/* Actions */}
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-between space-x-2">
                 {incomingFile && (
                     <button
                         onClick={handleAccept}
-                        className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                        className="px-4 py-2 bg-[#8E1616] text-white rounded hover:bg-[#8E1644] transition-colors"
                     >
                         Accept File
                     </button>
@@ -126,7 +126,7 @@ export const FileReceiver = ({
 
                 {incomingFile && <button
                     onClick={handleReject}
-                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                    className="px-4 py-2 bg-black text-white rounded hover:bg-[#222222] transition-colors"
                 >
                     Reject
                 </button>}

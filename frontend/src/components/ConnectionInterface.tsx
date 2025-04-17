@@ -87,7 +87,7 @@ export function ConnectionInterface({
                                     await createPeerConnection();
                                 }
                             }}
-                            className="bg-indigo-500 text-white px-4 py-2 rounded-md hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                            className="bg-[#8E1616] text-white px-4 py-2 rounded-md hover:bg-black disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                         >
                             Connect
                         </button>
@@ -96,7 +96,7 @@ export function ConnectionInterface({
             )}
 
             {/* Status and Peer ID */}
-            <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="bg-[#F8EEDF] p-3 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-700">
                         Peer Connection Status:
@@ -105,8 +105,8 @@ export function ConnectionInterface({
                     <span
                         className={`text-sm font-medium ${
                             pcStatus === "Connected"
-                                ? "text-green-500"
-                                : "text-red-500"
+                                ? "text-[#000000]"
+                                : "text-[#8E1616]"
                         } ${
                             pcStatus === "Connecting" ? "text-yellow-500" : ""
                         }`}
