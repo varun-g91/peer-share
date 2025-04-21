@@ -15,12 +15,14 @@ export const useWebSocket = () => {
         wsStatus,
     } = useSelector((state: RootState) => state.peer);
 
-    const WS_PORT = import.meta.env.VITE_WS_PORT || '8080';
+    const WS_URL = import.meta.env.SIGNALING_SERVER_URL;
+
+    const WS_PORT = import.meta.env.VITE_WS_PORT;
 
     const connectWebSocket = (): Promise<void> => {
         return new Promise<void>((resolve, reject) => {
             try {
-                const socket = new WebSocket(`ws://${window.location.hostname}:${WS_PORT}`);
+                const socket = new WebSocket(`${WS_URL}:${WS_PORT}`);
     
                 if (!socket) {
                     reject(new Error("Unable to establish connection to websocket at the moment "));
