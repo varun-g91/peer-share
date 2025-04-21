@@ -187,22 +187,25 @@ export const usePeerConnection = (
         (channel: RTCDataChannel) => {
             try {
                 channel.binaryType = "arraybuffer";
+                
                 channel.onopen = () => {
-                    console.log("Data channel opened!");
-                    console.log("Data channel: ", channel);
-                    dispatch(setPeerConnectionStatus("Connected"));
-                    dispatch(setIsConnected(true));
-                    setConnectionTimeout();
+                    console.log("Data channel opened with state:", channel.readyState);
+                    if (channel.readyState === "open") {
+                        console.log("Data channel is fully open and ready");
+                        dispatch(setPeerConnectionStatus("Connected"));
+                        dispatch(setIsConnected(true));
+                        setConnectionTimeout();
+                    }
                 };
 
                 channel.onclose = () => {
-                    console.log("Data channel closed");
+                    console.log("Data channel closed with state:", channel.readyState);
                     dispatch(setPeerConnectionStatus("Disconnected"));
                     dispatch(setIsConnected(false));
                 };
 
                 channel.onerror = (error) => {
-                    console.error("Data channel error:", error);
+                    console.error("Data channel error:", error, "State:", channel.readyState);
                     dispatch(setPeerConnectionStatus("Error"));
                     dispatch(setIsConnected(false));
                 };
@@ -212,7 +215,7 @@ export const usePeerConnection = (
                     handleDataChannelMessage(event);
                 };
             } catch (error) {
-                console.error("Error setting up data channel");
+                console.error("Error in handleDataChannelEvents:", error);
                 dispatch(setPeerConnectionStatus("Error"));
                 dispatch(setIsConnected(false));
             }
@@ -243,31 +246,23 @@ export const usePeerConnection = (
             // Monitor connection state
             if (peerConnectionRef.current) {
                 peerConnectionRef.current.onconnectionstatechange = () => {
-                    console.log(
-                        "Connection state changed:",
-                        peerConnectionRef.current?.connectionState
-                    );
-                    if (
-                        peerConnectionRef.current?.connectionState ===
-                        "connected"
-                    ) {
-                        // handleConnectionStateChange();
-                        // dispatch(setIsConnected(true));
-                        console.log(
-                            "Connection State Changed: ",
-                            peerConnectionRef?.current.connectionState
-                        );
-                    } else if (
-                        peerConnectionRef.current?.connectionState ===
-                        "disconnected"
-                    ) {
-                        console.log(
-                            "Connection State Changed: ",
-                            peerConnectionRef?.current.connectionState
-                        );
-
-                        dispatch(setPeerConnectionStatus("Disconnected"));
-                        dispatch(setIsConnected(false));
+                    const state = peerConnectionRef.current?.connectionState;
+                    console.log("Connection state changed to:", state);
+                    
+                    switch(state) {
+                        case "connected":
+                            console.log("Peer connection fully established, waiting for data channel");
+                            break;
+                        case "disconnected":
+                        case "failed":
+                            console.log("Peer connection failed or disconnected:", state);
+                            dispatch(setPeerConnectionStatus("Disconnected"));
+                            dispatch(setIsConnected(false));
+                            break;
+                        case "connecting":
+                            console.log("Peer connection in progress");
+                            dispatch(setPeerConnectionStatus("Connecting"));
+                            break;
                     }
                 };
 
