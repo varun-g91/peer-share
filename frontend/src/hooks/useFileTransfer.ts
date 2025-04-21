@@ -59,7 +59,6 @@ export const useFileTransfer = () => {
                         if (offset < file.size) {
                             readNextChunk();
                         } else {
-                            console.log("File transfer completed:", file.name);
                             setFileSending(false);
                             // dispatch(completeTransfer());
                             // dispatch(resetCurrentTransfer());

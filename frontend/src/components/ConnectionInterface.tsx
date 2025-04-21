@@ -15,6 +15,7 @@ import {
 type Role = "sender" | "receiver" | null;
 
 interface ConnectionInterfaceProps {
+    
     createPeerConnection: () => Promise<RTCPeerConnection | null>;
     copyPeerId: () => void;
     copied: boolean;

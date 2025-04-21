@@ -1,0 +1,37 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="32" cy="32" r="30" fill="#4A56E2" />
+  
+  <!-- Decentralized Network Representation -->
+  <!-- Central Node -->
+  <circle cx="32" cy="32" r="5" fill="#FFFFFF" />
+  
+  <!-- Outer Nodes -->
+  <circle cx="18" cy="18" r="4" fill="#FFFFFF" />
+  <circle cx="46" cy="18" r="4" fill="#FFFFFF" />
+  <circle cx="18" cy="46" r="4" fill="#FFFFFF" />
+  <circle cx="46" cy="46" r="4" fill="#FFFFFF" />
+  <circle cx="12" cy="32" r="4" fill="#FFFFFF" />
+  <circle cx="52" cy="32" r="4" fill="#FFFFFF" />
+  
+  <!-- Interconnected Lines -->
+  <line x1="32" y1="32" x2="18" y2="18" stroke="#FFFFFF" stroke-width="1.5" />
+  <line x1="32" y1="32" x2="46" y2="18" stroke="#FFFFFF" stroke-width="1.5" />
+  <line x1="32" y1="32" x2="18" y2="46" stroke="#FFFFFF" stroke-width="1.5" />
+  <line x1="32" y1="32" x2="46" y2="46" stroke="#FFFFFF" stroke-width="1.5" />
+  <line x1="32" y1="32" x2="12" y2="32" stroke="#FFFFFF" stroke-width="1.5" />
+  <line x1="32" y1="32" x2="52" y2="32" stroke="#FFFFFF" stroke-width="1.5" />
+  
+  <!-- Interconnections between outer nodes (mesh network) -->
+  <line x1="18" y1="18" x2="46" y2="18" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.7" />
+  <line x1="46" y1="18" x2="52" y2="32" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.7" />
+  <line x1="52" y1="32" x2="46" y2="46" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.7" />
+  <line x1="46" y1="46" x2="18" y2="46" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.7" />
+  <line x1="18" y1="46" x2="12" y2="32" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.7" />
+  <line x1="12" y1="32" x2="18" y2="18" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.7" />
+  
+  <!-- Data Transfer Animation -->
+  <circle cx="25" cy="25" r="1.5" fill="#64FFDA" />
+  <circle cx="40" cy="32" r="1.5" fill="#64FFDA" />
+  <circle cx="27" cy="40" r="1.5" fill="#64FFDA" />
+</svg>
