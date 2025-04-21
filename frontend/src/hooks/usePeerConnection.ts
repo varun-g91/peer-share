@@ -36,7 +36,7 @@ type CandidateSignal = {
     candidate: RTCIceCandidate;
 };
 
-const CONNECTION_TIMEOUT = 1 * 60 * 1000; // 10 minutes
+const CONNECTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
 export const usePeerConnection = (
     socketRef: React.RefObject<WebSocket | null>
