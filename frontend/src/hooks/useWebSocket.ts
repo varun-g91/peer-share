@@ -15,14 +15,14 @@ export const useWebSocket = () => {
         wsStatus,
     } = useSelector((state: RootState) => state.peer);
 
-    const WS_URL = import.meta.env.SIGNALING_SERVER_URL;
+    const WS_URL = import.meta.env.VITE_SIGNALING_SERVER;
 
-    const WS_PORT = import.meta.env.VITE_WS_PORT;
+    // const WS_PORT = import.meta.env.VITE_WS_PORT;
 
     const connectWebSocket = (): Promise<void> => {
         return new Promise<void>((resolve, reject) => {
             try {
-                const socket = new WebSocket(`${WS_URL}:${WS_PORT}`);
+                const socket = new WebSocket(WS_URL);
     
                 if (!socket) {
                     reject(new Error("Unable to establish connection to websocket at the moment "));
@@ -32,6 +32,7 @@ export const useWebSocket = () => {
                 socketRef.current = socket;
     
                 socket.onopen = () => {
+                    console.log("WebSocket connection established");
                     dispatch(setWebSocketConnected(true));
                     dispatch(setWebSocketStatus("Connected"));
                     const newPeerId = Math.random().toString(36).substring(7);
