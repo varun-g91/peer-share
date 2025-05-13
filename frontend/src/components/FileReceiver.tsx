@@ -10,7 +10,7 @@ import {
     resetCurrentTransfer,
 } from "../store/transferSlice";
 import { useDispatch } from "react-redux";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface FileReceiverProps {
     fileInfoRef: React.RefObject<FileMetadata | null>;
@@ -36,17 +36,20 @@ export const FileReceiver = ({
     isReceivingFile,
     receivedSizeRef,
 }: FileReceiverProps) => {
-    if (!isReceivingFile && !currentTransfer) {
-        console.log("No current transfer");
-        return null;
-    }
     const dispatch = useDispatch();
+
 
     const acceptTransferredFile = useCallback(() => {
         console.log("acceptTransferredFile called");
         console.log("completedFileRef:", completedFileRef.current);
-        if (completedFileRef.current) {
-            console.log("File accepted:", completedFileRef.current);
+
+        if (!completedFileRef.current) {
+            console.error("No completed file to accept.");
+            return;
+        }
+
+        
+        try {
             const file = completedFileRef.current;
             const link = document.createElement("a");
             link.href = URL.createObjectURL(file);
@@ -57,24 +60,44 @@ export const FileReceiver = ({
             completedFileRef.current = null;
             fileInfoRef.current = null;
             dispatch(completeTransfer());
-            return;
-        } else {
-            console.error("No completed file to accept.");
+            dispatch(setIsReceivingFile(false));
+            dispatch(setIncomingFile(null));
+        } catch (error) {
+            console.error("Error accepting file:", error);
         }
-
-        return;
     }, [dispatch, completedFileRef, fileInfoRef]);
 
-    
     const handleAccept = async () => {
-        if (incomingFile && dataChannelRef.current?.readyState === "open") {
-            dataChannelRef.current.send(JSON.stringify({
-                messageType: "file-accepted",
-                fileId: incomingFile.metadata?.id,
-                fileMetadata: incomingFile.metadata,
-            }));
+        if (
+            !incomingFile ||
+            !dataChannelRef.current ||
+            dataChannelRef.current.readyState !== "open"
+        ) {
+            console.error("Cannot accept file - invalid state", {
+                incomingFile: !!incomingFile,
+                dataChannel: !!dataChannelRef.current,
+                readyState: dataChannelRef.current?.readyState,
+            });
+            return;
+        }
+
+        if (!completedFileRef.current) {
+            console.error("Cannot accept file - transfer not complete");
+            return;
+        }
+
+        try {
+            dataChannelRef.current.send(
+                JSON.stringify({
+                    messageType: "file-accepted",
+                    fileId: incomingFile.metadata?.id,
+                    fileMetadata: incomingFile.metadata,
+                })
+            );
             acceptTransferredFile();
             resetFileReceiver();
+        } catch (error) {
+            console.error("Error in handleAccept:", error);
         }
     };
 
@@ -84,14 +107,24 @@ export const FileReceiver = ({
     };
 
     useEffect(() => {
-        console.log("Receive progress:", receiveProgress);  
+        console.log("Receive progress:", receiveProgress);
         console.log("isReceivingFile:", isReceivingFile);
         console.log("size: ", incomingFile?.metadata?.size);
     }, [receiveProgress, isReceivingFile]);
 
     useEffect(() => {
-        console.log("currentTransfer inside FileReceiver", currentTransfer);
-    }, [currentTransfer]);
+        console.log("FileReceiver mounted with state:", {
+            currentTransfer,
+            incomingFile,
+            dataChannelState: dataChannelRef.current?.readyState,
+            completedFile: completedFileRef.current,
+            fileInfo: fileInfoRef.current,
+        });
+    }, []);
+
+    if (!currentTransfer || !isReceivingFile) {
+        return null;
+    }
 
     return (
         <div className="p-4 border rounded-lg shadow-sm space-y-4">
@@ -100,37 +133,41 @@ export const FileReceiver = ({
                 <FileIcon size={24} />
                 <div>
                     <p className="font-medium">
-                        {incomingFile?.metadata?.name ? incomingFile?.metadata?.name : null}
+                        {incomingFile?.metadata?.name
+                            ? incomingFile?.metadata?.name
+                            : null}
                     </p>
                     <p className="text-sm text-gray-500">
-                        {currentTransfer?.fileMetadata?.size && formatFileSize(currentTransfer.fileMetadata.size)} bytes
+                        {currentTransfer?.fileMetadata?.size &&
+                            formatFileSize(
+                                currentTransfer.fileMetadata.size
+                            )}{" "}
+                        bytes
                     </p>
                 </div>
             </div>
 
-                {(typeof receiveProgress === "number") && (
-                   <ProgressBar
-                        progress={receiveProgress}
-                    /> 
-                )}
-            {/* Actions */}
-            <div className="flex justify-between space-x-2">
-                {incomingFile && (
-                    <button
-                        onClick={handleAccept}
-                        className="px-4 py-2 bg-[#8E1616] text-white rounded hover:bg-[#8E1644] transition-colors"
-                    >
-                        Accept File
-                    </button>
-                )}
-
-                {incomingFile && <button
-                    onClick={handleReject}
-                    className="px-4 py-2 bg-black text-white rounded hover:bg-[#222222] transition-colors"
-                >
-                    Reject
-                </button>}
-            </div>
+            {typeof receiveProgress === "number" && (
+                <ProgressBar progress={receiveProgress} />
+            )}
+            {incomingFile && completedFileRef.current && (
+                <div className="flex justify-between space-x-2">
+                    <>
+                        <button
+                            onClick={handleAccept}
+                            className="px-4 py-2 bg-[#8E1616] text-white rounded hover:bg-[#8E1644] transition-colors"
+                        >
+                            Accept File
+                        </button>
+                        <button
+                            onClick={handleReject}
+                            className="px-4 py-2 bg-black text-white rounded hover:bg-[#222222] transition-colors"
+                        >
+                            Reject
+                        </button>{" "}
+                    </>
+                </div>
+            )}
         </div>
     );
 };

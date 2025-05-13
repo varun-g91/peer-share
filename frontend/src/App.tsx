@@ -295,7 +295,7 @@ const App = () => {
                 wsStatus={wsStatus}
             />
 
-            <div className="w-full max-w-lg bg-[#E9C999] rounded-lg shadow-lg overflow-hidden">
+            <div className="w-full max-w-xl h-auto bg-[#E9C999] rounded-lg shadow-lg overflow-hidden scale-110">
                 <Header />
 
                 <div className="p-4 space-y-4">

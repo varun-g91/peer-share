@@ -26,6 +26,6 @@ export interface IncomingFile {
 
 export interface Transfer {
     fileMetadata?: FileMetadata;
-    timestamp: string;
+    timestamp: Date;
     status: TransferStatus;
 }

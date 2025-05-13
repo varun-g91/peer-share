@@ -5,21 +5,19 @@ interface ProgressBarProps {
     className?: string;
 }
 
-export const ProgressBar: React.FC<ProgressBarProps> = ({
-    progress,
-}) => {
-
+export const ProgressBar: React.FC<ProgressBarProps> = ({ progress }) => {
+    console.log("Progress: ", progress) 
     if (typeof progress !== "number") return null;
 
-  const clampedProgress = Math.min(Math.max(progress, 0), 100);
-  console.log("Progress: ", clampedProgress)
+    const clampedProgress = Math.min(Math.max(progress, 0), 100);
+    console.log("Clamped Progress: ", clampedProgress);
 
-  return (
-    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-      <div
-        className="bg-blue-500 h-full transition-all duration-200"
-        style={{ width: `${clampedProgress}%` }}
-      />
-    </div>
-  );
+    return (
+        <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+            <div
+                className="bg-blue-500 h-full transition-all duration-200"
+                style={{ width: `${clampedProgress}%` }}
+            />
+        </div>
+    );
 };

@@ -7,6 +7,7 @@ import {
     Transfer,
 } from "../types";
 import { useDispatch, useSelector } from "react-redux";
+import { store } from "../store";
 import {
     setIncomingFile,
     setReceiveProgress,
@@ -21,6 +22,7 @@ import {
 } from "../store/peerSlice";
 import { RootState } from "../store";
 import { startTransfer, resetCurrentTransfer, completeTransfer } from "../store/transferSlice";
+import { iceConfiguration } from "../utils/iceServers";
 
 type OfferSignal = {
     peerId: string;
@@ -55,36 +57,7 @@ export const usePeerConnection = (
     const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
-    const iceServers = useMemo(
-        () => ({
-            iceServers: [
-                {
-                    urls: "stun:stun.relay.metered.ca:80",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80",
-                    username: "9e32000a1b04a9c0d7bb4425",
-                    credential: "VUJvL9eXEdxKPMhu",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-                    username: "9e32000a1b04a9c0d7bb4425",
-                    credential: "VUJvL9eXEdxKPMhu",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:443",
-                    username: "9e32000a1b04a9c0d7bb4425",
-                    credential: "VUJvL9eXEdxKPMhu",
-                },
-                // {
-                //     urls: "turns:global.relay.metered.ca:443?transport=tcp",
-                //     username: "9e32000a1b04a9c0d7bb4425",
-                //     credential: "VUJvL9eXEdxKPMhu",
-                // },
-            ],
-        }),
-        []
-    );
+    const iceServers = useMemo(() => iceConfiguration, []);
 
     const disconnectPeer = useCallback(() => {
         if (peerConnectionRef.current) {
@@ -102,6 +75,7 @@ export const usePeerConnection = (
         clearTimeout(connectionTimeoutRef.current!);
         connectionTimeoutRef.current = setTimeout(() => {
             console.log("Connection timed out. Disconnecting...");
+            alert("Connection timed out. Please try again.");
             disconnectPeer();
         }, CONNECTION_TIMEOUT);
     }, [disconnectPeer]);
@@ -120,12 +94,18 @@ export const usePeerConnection = (
                     dispatch(setIsReceivingFile(true));
                     const parsedData = JSON.parse(event.data);
                     if (parsedData.messageType === "file-info") {
-                        fileInfoRef.current = {
+                        const fileMetadata = {
                             name: parsedData.name,
                             id: parsedData.id,
                             type: parsedData.type,
                             size: parsedData.size,
                         };
+
+                        fileInfoRef.current = fileMetadata;
+                        console.log("Received file metadata:", fileMetadata);
+
+                        dispatch(setIncomingFile({ metadata: fileMetadata }));
+                        
                         dispatch(startTransfer(fileInfoRef.current));
                     }
                 } else if (event.data instanceof ArrayBuffer) {
@@ -142,12 +122,7 @@ export const usePeerConnection = (
                                 fileInfoRef.current.name,
                                 { type: fileInfoRef.current.type }
                             );
-
-                            dispatch(setIncomingFile({ metadata: fileInfoRef.current }));
                             completedFileRef.current = completeFile;
-                            receivedBuffersRef.current = [];
-                            receivedSizeRef.current = 0;
-                            fileInfoRef.current = null;
                             dispatch(setReceiveProgress(null));
                         }
                     }
@@ -162,19 +137,38 @@ export const usePeerConnection = (
     const handleDataChannelEvents = useCallback(
         (channel: RTCDataChannel) => {
             try {
+                console.log("Setting up data channel events for channel:", channel.label);
                 channel.binaryType = "arraybuffer";
-                
-                channel.onopen = () => {
+
+                dataChannelRef.current = channel;
+
+                const updateConnectionState = () => {
+                    console.log("Updating connection state. Channel state:", channel.readyState);
                     if (channel.readyState === "open") {
                         dispatch(setPeerConnectionStatus("Connected"));
                         dispatch(setIsConnected(true));
                         setConnectionTimeout();
+
+                        setTimeout(() => {
+                            const state = store.getState().peer;
+                            console.log("Connection state after update:", {
+                                pcStatus: state.pcStatus,
+                                isConnected: state.isConnected
+                            });
+                        }, 0);
                     }
                 };
 
+                channel.onopen = () => {
+                    console.log("Data channel onopen triggered, state:", channel.readyState);
+                    updateConnectionState();
+                };
+
                 channel.onclose = () => {
+                    console.log("Data channel closed");
                     dispatch(setPeerConnectionStatus("Disconnected"));
                     dispatch(setIsConnected(false));
+                    dataChannelRef.current = null;
                 };
 
                 channel.onerror = (error) => {
@@ -184,36 +178,50 @@ export const usePeerConnection = (
                 };
 
                 channel.onmessage = handleDataChannelMessage;
+
+                // If channel is already open when we set up events
+                if (channel.readyState === "open") {
+                    console.log("Channel already open on setup");
+                    updateConnectionState();
+                }
+
             } catch (error) {
-                console.error("Data channel setup error:", error);
+                console.error("Error in handleDataChannelEvents:", error);
                 dispatch(setPeerConnectionStatus("Error"));
                 dispatch(setIsConnected(false));
             }
         },
-        [handleDataChannelMessage, targetPeerId, role, setPeerConnectionStatus, setIsConnected, dispatch]
+        [handleDataChannelMessage, setConnectionTimeout, dispatch]
     );
 
 
     const createPeerConnection = useCallback(async () => {
         try {
             if (peerConnectionRef.current) {
+                console.log("Peer connection exists, returning existing connection");
                 return peerConnectionRef.current;
             }
 
-            peerConnectionRef.current = new RTCPeerConnection(iceServers);
+            console.log("Creating new peer connection with ICE servers:", iceServers);
+            peerConnectionRef.current = new RTCPeerConnection(iceServers as RTCConfiguration);
             dispatch(setPeerConnectionStatus("Connecting"));
             dispatch(setIsInitiator(true));
 
             if (peerConnectionRef.current) {
                 peerConnectionRef.current.onconnectionstatechange = () => {
                     const state = peerConnectionRef.current?.connectionState;
-                    switch(state) {
+                    console.log("Connection state changed:", state);
+
+                    switch (state) {
                         case "connected":
-                            console.log("Peer connection established");
+                            // Only update if we have a data channel
+                            if (dataChannelRef.current?.readyState === "open") {
+                                dispatch(setPeerConnectionStatus("Connected"));
+                                dispatch(setIsConnected(true));
+                            }
                             break;
                         case "disconnected":
                         case "failed":
-                            console.error("Peer connection failed or disconnected:", state);
                             dispatch(setPeerConnectionStatus("Disconnected"));
                             dispatch(setIsConnected(false));
                             break;
@@ -223,9 +231,39 @@ export const usePeerConnection = (
                     }
                 };
 
-                const channel = peerConnectionRef.current.createDataChannel("fileTransfer");
+                // Add ICE connection state monitoring
+                peerConnectionRef.current.oniceconnectionstatechange = () => {
+                    console.log("ICE Connection State:", peerConnectionRef.current?.iceConnectionState);
+                    if (peerConnectionRef.current?.iceConnectionState === 'failed') {
+                        console.log("ICE connection failed, attempting restart...");
+                        if (peerConnectionRef.current) {
+                            peerConnectionRef.current.restartIce();
+                        }
+                    }
+                };
+
+                // Create data channel before creating offer
+                console.log("Creating data channel as initiator");
+                const channel = peerConnectionRef.current.createDataChannel("fileTransfer", {
+                    ordered: true,
+                    negotiated: false,
+                    maxRetransmits: 3,
+                    protocol: 'file-transfer'
+                });
+                console.log("Data channel created with ID:", channel.id);
                 dataChannelRef.current = channel;
                 handleDataChannelEvents(channel);
+
+                peerConnectionRef.current.ondatachannel = (event) => {
+                    console.log("Received remote data channel");
+                    if (event.channel) {
+                        dataChannelRef.current = event.channel;
+                        handleDataChannelEvents(event.channel);
+                    } else {
+                        console.error("Received null data channel");
+                        dispatch(setPeerConnectionStatus("Error"));
+                    }
+                };
 
                 peerConnectionRef.current.onicecandidate = (event) => {
                     if (event.candidate && socketRef.current?.readyState === WebSocket.OPEN) {
@@ -239,21 +277,19 @@ export const usePeerConnection = (
                     }
                 };
 
-                peerConnectionRef.current.oniceconnectionstatechange = () => {
-                    if (peerConnectionRef.current?.iceConnectionState === "failed") {
-                        console.error("ICE connection failed");
-                    }
-                };
+                peerConnectionRef.current.onicecandidateerror = (event) => {
+                    console.warn("ICE candidate error:", {
+                        errorCode: event.errorCode,
+                        errorText: event.errorText,
+                        address: event.address,
+                        port: event.port,
+                        url: event.url
+                    });
 
-                peerConnectionRef.current.onicecandidateerror = (error) => {
-                    if (!error.url.includes("stun:")) {
-                        console.error("Critical ICE candidate error:", error);
+                    // Try fallback to TCP if UDP fails
+                    if (event.errorCode === 701) {
+                        console.log("Attempting fallback to TCP...");
                     }
-                };
-
-                peerConnectionRef.current.ondatachannel = (event) => {
-                    dataChannelRef.current = event.channel;
-                    handleDataChannelEvents(event.channel);
                 };
 
                 try {
@@ -286,7 +322,7 @@ export const usePeerConnection = (
 
             return peerConnectionRef.current;
         } catch (error) {
-            console.error("Error creating peer connection:", error);
+            console.error("Error in createPeerConnection:", error);
             dispatch(setPeerConnectionStatus("Error"));
             return null;
         }
@@ -311,7 +347,7 @@ export const usePeerConnection = (
 
                 if (!peerConnectionRef.current) {
                     console.log("Creating peer connection on offer (remote peer)");
-                    peerConnectionRef.current = new RTCPeerConnection(iceServers);
+                    peerConnectionRef.current = new RTCPeerConnection(iceServers as RTCConfiguration);
 
                     peerConnectionRef.current.onicecandidate = (event) => {
                         if (event.candidate) {

@@ -69,7 +69,8 @@ const peerSlice = createSlice({
             state.role = action.payload;
         },
 
-        setIsConnected(state, action: PayloadAction<boolean>) {
+        setIsConnected: (state, action: PayloadAction<boolean>) => {
+            console.log("Setting isConnected:", action.payload);
             state.isConnected = action.payload;
         },
 
@@ -93,14 +94,9 @@ const peerSlice = createSlice({
                 state.isInitiator = action.payload;
         },
 
-        setPeerConnectionStatus(
-            state,
-            action: PayloadAction<PeerConnectionStatus>
-        ) {
+        setPeerConnectionStatus: (state, action: PayloadAction<PeerConnectionStatus>) => {
+            console.log("Setting peer connection status:", action.payload);
             state.pcStatus = action.payload;
-            if (state.localPeer) {
-                state.localPeer.isConnected = action.payload === "Connected";
-            }
         },
 
         resetPeerConnection(state) {

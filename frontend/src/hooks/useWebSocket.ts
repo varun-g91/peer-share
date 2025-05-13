@@ -15,7 +15,7 @@ export const useWebSocket = () => {
         wsStatus,
     } = useSelector((state: RootState) => state.peer);
 
-    const WS_URL = import.meta.env.VITE_SIGNALING_SERVER;
+    const WS_URL = import.meta.env.VITE_ENV === 'production' ? import.meta.env.VITE_SIGNALING_SERVER : `ws://${window.location.hostname}:8800`;
 
     // const WS_PORT = import.meta.env.VITE_WS_PORT;
 

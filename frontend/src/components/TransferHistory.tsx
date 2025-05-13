@@ -5,6 +5,7 @@ import { formatFileSize } from "../utils/formatFileSize";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "../store";
 import { deleteTransfer } from "../store/transferSlice";
+import { formatTimestamp } from "../utils/formatTimestamp";
 
 interface TransferHistoryProps {
     transferHistory: Transfer[];
@@ -77,7 +78,7 @@ export const TransferHistory = ({ transferHistory }: TransferHistoryProps) => {
                         <div className="flex items-center space-x-2">
                             {getStatusIcon(transfer.status)}
                             <span className="text-xs text-gray-500">
-                                {getStatusText(transfer.status)} • {transfer.timestamp}
+                                {getStatusText(transfer.status)} • {formatTimestamp(new Date(transfer.timestamp))}
                             </span>
                             <button onClick={() => handleDeleteHistory(transfer.fileMetadata?.id || '')}>
                                 <X size={18} className="text-red-500" />  
